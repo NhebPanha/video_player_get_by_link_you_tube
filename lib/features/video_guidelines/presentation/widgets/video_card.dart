@@ -1,7 +1,8 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 import '../../data/models/video_guideline_model.dart';
-import '../screens/secure_video_player_screen.dart';
+import '../screens/secure_video_player_screen.dart'; // Keeping the filename as is but using the new class
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../bloc/video_guidelines_bloc.dart';
 
@@ -9,10 +10,21 @@ class VideoCard extends StatelessWidget {
   final VideoGuideline video;
 
   const VideoCard({Key? key, required this.video}) : super(key: key);
+  
+  String _getValidThumbnailUrl(String url) {
+    if (url.contains('youtu.be') || url.contains('youtube.com')) {
+      final videoId = YoutubePlayerController.convertUrlToId(url);
+      if (videoId != null && videoId.isNotEmpty) {
+        return 'https://img.youtube.com/vi/$videoId/0.jpg';
+      }
+    }
+    return url;
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final validThumbnailUrl = _getValidThumbnailUrl(video.thumbnail);
     
     return Card(
       elevation: 2,
@@ -25,7 +37,7 @@ class VideoCard extends StatelessWidget {
             MaterialPageRoute(
               builder: (_) => BlocProvider.value(
                 value: context.read<VideoGuidelinesBloc>(),
-                child: SecureVideoPlayerScreen(video: video),
+                child: VideoPlayerScreen(video: video),
               ),
             ),
           );
@@ -36,7 +48,7 @@ class VideoCard extends StatelessWidget {
             Stack(
               children: [
                 CachedNetworkImage(
-                  imageUrl: video.thumbnail,
+                  imageUrl: validThumbnailUrl,
                   height: 180,
                   width: double.infinity,
                   fit: BoxFit.cover,

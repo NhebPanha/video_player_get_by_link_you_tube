@@ -1,132 +1,155 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:youtube_player_iframe/youtube_player_iframe.dart';
+import 'package:omni_video_player/omni_video_player.dart';
 import '../../data/models/video_guideline_model.dart';
 import '../bloc/video_guidelines_bloc.dart';
 import '../bloc/video_guidelines_event.dart';
-import '../widgets/custom_player_controls.dart';
 
-class SecureVideoPlayerScreen extends StatefulWidget {
+class VideoPlayerScreen extends StatefulWidget {
   final VideoGuideline video;
 
-  const SecureVideoPlayerScreen({Key? key, required this.video}) : super(key: key);
+  const VideoPlayerScreen({Key? key, required this.video}) : super(key: key);
 
   @override
-  State<SecureVideoPlayerScreen> createState() => _SecureVideoPlayerScreenState();
+  State<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
 }
 
-class _SecureVideoPlayerScreenState extends State<SecureVideoPlayerScreen> {
-  late YoutubePlayerController _controller;
-  bool _isPlaying = true;
+class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
+  OmniPlaybackController? _controller;
   double _progress = 0.0;
   Timer? _progressTimer;
+
+  void _update() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() {});
+    });
+  }
 
   @override
   void initState() {
     super.initState();
-    
-    final videoId = YoutubePlayerController.convertUrlToId(widget.video.youtubeUrl) ?? '';
+    // Position tracking removed as OmniPlaybackController does not expose current position directly in this version
+  }
 
-    _controller = YoutubePlayerController.fromVideoId(
-      videoId: videoId,
-      autoPlay: true,
-      params: const YoutubePlayerParams(
-        showControls: false,
-        showFullscreenButton: false,
-        strictRelatedVideos: true,
-        enableKeyboard: false,
-        enableJavaScript: true, // Needed for API
-        pointerEvents: PointerEvents.none, // Try to disable pointer events on web
-      ),
+  void _saveProgress() {
+    final percentage = (_progress * 100).clamp(0.0, 100.0);
+    context.read<VideoGuidelinesBloc>().add(
+      UpdateVideoProgressEvent(widget.video.id, percentage),
     );
-
-    // Initial seek if progress is saved and not completed
-    if (widget.video.progress > 0 && !widget.video.isCompleted) {
-      _controller.listen((event) {
-        if (event.playerState == PlayerState.playing && _progress == 0.0) {
-          // Calculate start time based on progress
-          event.metaData.duration.inSeconds;
-          final durationSecs = event.metaData.duration.inSeconds;
-          if (durationSecs > 0) {
-             final startSeconds = (widget.video.progress / 100) * durationSecs;
-             _controller.seekTo(seconds: startSeconds, allowSeekAhead: true);
-          }
-        }
-      });
-    }
-
-    // Start timer to periodically track and save progress
-    _progressTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
-      final duration = await _controller.duration;
-      final position = await _controller.currentTime;
-      final state = await _controller.playerState;
-
-      if (mounted) {
-        setState(() {
-          _isPlaying = state == PlayerState.playing;
-          if (duration > 0) {
-            _progress = position / duration;
-          }
-        });
-
-        // Save progress to bloc (and shared prefs)
-        if (duration > 0 && _isPlaying) {
-          final percentage = (_progress * 100).clamp(0.0, 100.0);
-          context.read<VideoGuidelinesBloc>().add(
-            UpdateVideoProgressEvent(widget.video.id, percentage),
-          );
-        }
-      }
-    });
   }
 
   @override
   void dispose() {
     _progressTimer?.cancel();
-    _controller.close();
+    _controller?.removeListener(_update);
     super.dispose();
-  }
-
-  void _togglePlayPause() {
-    if (_isPlaying) {
-      _controller.pauseVideo();
-    } else {
-      _controller.playVideo();
-    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.video.title),
-      ),
+      appBar: AppBar(title: Text(widget.video.title)),
       body: Column(
         children: [
-          AspectRatio(
-            aspectRatio: 16 / 9,
-            child: Stack(
-              children: [
-                // IgnorePointer completely blocks user from interacting with iframe directly
-                IgnorePointer(
-                  child: YoutubePlayer(
-                    controller: _controller,
-                    backgroundColor: Colors.black,
-                  ),
+          Expanded(
+            flex: 2,
+            child: OmniVideoPlayer(
+              callbacks: VideoPlayerCallbacks(
+                onControllerCreated: (controller) {
+                  _controller?.removeListener(_update);
+                  _controller = controller..addListener(_update);
+                  
+                  // Initial Seek if we have saved progress
+                  if (widget.video.progress > 0 && !widget.video.isCompleted) {
+                     Future.delayed(const Duration(milliseconds: 500), () {
+                        if (_controller != null) {
+                           final durationMs = _controller!.duration.inMilliseconds;
+                           if (durationMs > 0) {
+                             final targetPos = Duration(milliseconds: ((widget.video.progress / 100) * durationMs).toInt());
+                             _controller!.seekTo(targetPos);
+                           }
+                        }
+                     });
+                  }
+                },
+                onFinished: () {
+                  _progress = 1.0;
+                  _saveProgress();
+                },
+                // Add default empty callbacks required by OmniVideoPlayer if needed
+                onFullScreenToggled: (isFullScreen) {},
+                onOverlayControlsVisibilityChanged: (areVisible) {},
+                onCenterControlsVisibilityChanged: (areVisible) {},
+                onMuteToggled: (isMute) {},
+                onSeekStart: (pos) {},
+                onSeekEnd: (pos) {},
+                onSeekRequest: (target) => true,
+                onReplay: () {},
+              ),
+              configuration: VideoPlayerConfiguration(
+                videoSourceConfiguration: VideoSourceConfiguration.youtube(
+                  videoUrl: Uri.parse(widget.video.youtubeUrl),
+                  preferredQualities: [OmniVideoQuality.high720, OmniVideoQuality.medium480],
+                  availableQualities: [OmniVideoQuality.high1080, OmniVideoQuality.high720, OmniVideoQuality.medium480],
+                  enableYoutubeWebViewFallback: true,
+                  forceYoutubeWebViewOnly: false,
+                ).copyWith(
+                  autoPlay: true,
+                  initialPosition: Duration.zero,
+                  initialVolume: 1.0,
+                  initialPlaybackSpeed: 1.0,
+                  availablePlaybackSpeed: [0.5, 1.0, 1.25, 1.5, 2.0],
+                  autoMuteOnStart: false,
+                  allowSeeking: true,
+                  synchronizeMuteAcrossPlayers: true,
+                  timeoutDuration: const Duration(seconds: 30),
                 ),
-                // Custom controls overlay
-                Positioned.fill(
-                  child: CustomPlayerControls(
-                    isPlaying: _isPlaying,
-                    onPlayPause: _togglePlayPause,
-                    progress: _progress,
+                playerTheme: OmniVideoPlayerThemeData().copyWith(
+                  icons: VideoPlayerIconTheme().copyWith(
+                    error: Icons.warning,
+                    playbackSpeedButton: Icons.speed,
                   ),
+                  // Removed invalid backdrop property
                 ),
-              ],
+                playerUIVisibilityOptions: PlayerUIVisibilityOptions().copyWith(
+                  showSeekBar: true,
+                  showCurrentTime: true,
+                  showDurationTime: true,
+                  showRemainingTime: true,
+                  showLiveIndicator: false,
+                  showLoadingWidget: true,
+                  showErrorPlaceholder: true,
+                  showReplayButton: true,
+                  showThumbnailAtStart: true,
+                  showVideoBottomControlsBar: true,
+                  showBottomControlsBarOnEndedFullscreen: true,
+                  showFullScreenButton: true,
+                  showSwitchVideoQuality: true,
+                  showSwitchWhenOnlyAuto: true,
+                  showPlaybackSpeedButton: true,
+                  showMuteUnMuteButton: true,
+                  showPlayPauseReplayButton: true,
+                  useSafeAreaForBottomControls: true,
+                  showGradientBottomControl: true,
+                  enableForwardGesture: true,
+                  enableBackwardGesture: true,
+                  enableExitFullscreenOnVerticalSwipe: true,
+                  enableOrientationLock: true,
+                  controlsPersistenceDuration: const Duration(seconds: 3),
+                  showBottomControlsBarOnPause: false,
+                  alwaysShowBottomControlsBar: false,
+                  fitVideoToBounds: true,
+                ),
+                customPlayerWidgets: CustomPlayerWidgets().copyWith(
+                  loadingWidget: const Center(child: CircularProgressIndicator(color: Colors.red)),
+                ),
+                enableBackgroundOverlayClip: true,
+              ),
             ),
           ),
           Expanded(
+            flex: 3,
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(16.0),
               child: Column(
@@ -159,6 +182,31 @@ class _SecureVideoPlayerScreenState extends State<SecureVideoPlayerScreen> {
                   Text(
                     widget.video.description,
                     style: Theme.of(context).textTheme.bodyLarge,
+                  ),
+                  const SizedBox(height: 32),
+                  // Additional controls as requested by the user snippet
+                  Center(
+                    child: Builder(
+                      builder: (context) {
+                        if (_controller == null) {
+                          return const CircularProgressIndicator();
+                        }
+
+                        final isPlaying = _controller!.isPlaying;
+
+                        return ElevatedButton.icon(
+                          onPressed: () {
+                            isPlaying ? _controller!.pause() : _controller!.play();
+                          },
+                          icon: Icon(isPlaying ? Icons.pause : Icons.play_arrow),
+                          label: Text(isPlaying ? 'Pause Video' : 'Play Video'),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                            textStyle: const TextStyle(fontSize: 18),
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 ],
               ),
