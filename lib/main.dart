@@ -28,10 +28,7 @@ class MyApp extends StatelessWidget {
           theme: ThemeData(
             colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
             useMaterial3: true,
-            appBarTheme: const AppBarTheme(
-              centerTitle: true,
-              elevation: 0,
-            ),
+            appBarTheme: const AppBarTheme(centerTitle: true, elevation: 0),
           ),
           home: const VideoGuidelinesScreen(),
         ),

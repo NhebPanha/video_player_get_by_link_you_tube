@@ -40,9 +40,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.video.title),
-      ),
       body: Column(
         children: [
           // Video Player Section
@@ -57,14 +54,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                 onFinished: _markAsCompleted,
               ),
               configuration: VideoPlayerConfiguration(
-                videoSourceConfiguration: VideoSourceConfiguration.youtube(
-                  videoUrl: Uri.parse(widget.video.youtubeUrl),
-                  enableYoutubeWebViewFallback: true,
-                ).copyWith(
-                  autoPlay: true,
-                  initialVolume: 1.0,
-                  allowSeeking: true,
-                ),
+                videoSourceConfiguration:
+                    VideoSourceConfiguration.youtube(
+                      videoUrl: Uri.parse(widget.video.youtubeUrl),
+                      enableYoutubeWebViewFallback: true,
+                    ).copyWith(
+                      autoPlay: true,
+                      initialVolume: 1.0,
+                      allowSeeking: true,
+                    ),
                 playerTheme: OmniVideoPlayerThemeData().copyWith(
                   icons: VideoPlayerIconTheme().copyWith(
                     error: Icons.warning,
@@ -88,56 +86,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                     child: CircularProgressIndicator(color: Colors.red),
                   ),
                 ),
-              ),
-            ),
-          ),
-          
-          // Video Details Section
-          Expanded(
-            flex: 3,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.video.title,
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  
-                  if (widget.video.isCompleted)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.green.shade600,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.check_circle, color: Colors.white, size: 18),
-                          SizedBox(width: 6),
-                          Text(
-                            'Completed',
-                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                          ),
-                        ],
-                      ),
-                    ),
-                    
-                  const SizedBox(height: 16),
-                  
-                  Text(
-                    widget.video.description,
-                    style: theme.textTheme.bodyLarge?.copyWith(
-                      height: 1.5,
-                      color: Colors.grey.shade800,
-                    ),
-                  ),
-                ],
               ),
             ),
           ),
